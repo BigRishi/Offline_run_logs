@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101820">
+<title>Run Logger — Offline</title>
+<style>
+:root{color-scheme:dark;--bg:#101820;--panel:#1a2732;--muted:#9aabb8;--text:#f3f7fa;--accent:#53d6a2;--danger:#ff7272;--warn:#ffd479}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+main{width:min(100%,580px);margin:auto;padding:22px 18px calc(28px + env(safe-area-inset-bottom))}
+h1{font-size:25px;margin:5px 0 3px}.sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+.panel{background:var(--panel);border:1px solid #2b3b48;border-radius:16px;padding:16px;margin-bottom:13px}
+.status{display:flex;align-items:center;gap:9px;font-size:14px;margin:0 0 13px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:#7d8a94}.dot.ok{background:var(--accent)}.dot.bad{background:var(--danger)}.dot.wait{background:var(--warn)}
+.checks{display:grid;gap:8px}.check{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:9px 10px;border-radius:9px;background:#111d26}.check span:last-child{font-weight:600}.oktxt{color:var(--accent)}.badtxt{color:var(--danger)}.waittxt{color:var(--warn)}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.metric{background:#111d26;border-radius:12px;padding:13px;min-height:82px}.metric small{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}.metric strong{font-size:24px;font-variant-numeric:tabular-nums}.unit{font-size:12px;color:var(--muted);margin-left:4px}
+.controls,.actions{display:flex;gap:9px;margin:13px 0 0}
+button{border:0;border-radius:11px;padding:14px 13px;font:600 15px system-ui;cursor:pointer;flex:1}
+button:disabled{opacity:.38;cursor:not-allowed}#start{background:var(--accent);color:#092219}#stop{background:var(--danger);color:#2a0808}.secondary{background:#293946;color:var(--text);font-size:13px}
+#message{font-size:13px;line-height:1.45;color:#c4d1d9;margin-top:11px;min-height:18px}
+.loghead{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}.loghead h2{font-size:16px;margin:0}.loghead span{font-size:12px;color:var(--muted)}
+.scroll{max-height:240px;overflow:auto}table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}th,td{text-align:left;padding:8px 4px;border-bottom:1px solid #30404b;white-space:nowrap}th{color:var(--muted);font-weight:500}
+.note,footer{font-size:11px;line-height:1.5;color:#91a2ae}.note{margin:12px 2px}footer{margin:15px 2px}
+</style>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png" type="image/png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+</head>
+<body>
+<main>
+<h1>Run Logger</h1>
+<p class="sub">Offline GPS run tracking · location sample every 40 seconds</p>
+
+<section class="panel">
+  <div class="loghead"><h2>Device readiness check</h2><span id="checkSummary">Checking…</span></div>
+  <div class="checks">
+    <div class="check"><span>Browser GPS support</span><span id="cSupport" class="waittxt">Checking</span></div>
+    <div class="check"><span>Secure page context</span><span id="cSecure" class="waittxt">Checking</span></div>
+    <div class="check"><span>Location permission</span><span id="cPermission" class="waittxt">Checking</span></div>
+    <div class="check"><span>Current GPS fix</span><span id="cFix" class="waittxt">Checking</span></div>
+  </div>
+  <div id="checkMessage" class="note">First tap Enable GPS / request permission. Chrome will show its own permission prompt when this page's origin supports geolocation.</div><div id="contextInfo" class="note"></div>
+  <button id="retry" class="secondary" style="width:100%;margin-top:10px">Enable GPS / request permission</button>
+  <button id="installApp" class="secondary" style="width:100%;margin-top:8px;display:none">Install Run Logger</button>
+</section>
+
+<div class="status"><span id="dot" class="dot"></span><span id="status">Waiting for GPS checks</span></div>
+<section class="panel">
+  <div class="metrics">
+    <div class="metric"><small>Distance</small><strong id="distance">0.00</strong><span class="unit">km</span></div>
+    <div class="metric"><small>Elapsed time</small><strong id="elapsed">00:00</strong></div>
+    <div class="metric"><small>Average pace</small><strong id="pace">--:--</strong><span class="unit">/km</span></div>
+    <div class="metric"><small>GPS samples</small><strong id="samples">0</strong></div>
+  </div>
+  <div class="controls"><button id="start" disabled>Start run</button><button id="stop" disabled>Stop</button></div>
+  <div id="message" role="status">Complete the GPS checks before starting.</div>
+</section>
+
+<section class="panel">
+  <div class="loghead"><h2>Location log</h2><span>Start · every 40 sec · Stop</span></div>
+  <div class="scroll"><table><thead><tr><th>#</th><th>Time</th><th>Latitude</th><th>Longitude</th><th>± m</th></tr></thead><tbody id="rows"><tr><td colspan="5" style="color:#9aabb8">No samples yet</td></tr></tbody></table></div>
+  <div class="actions"><button class="secondary" id="export" disabled>Export CSV</button><button class="secondary" id="reset" disabled>New run</button></div>
+</section>
+<p class="note">Distance is the sum of straight-line distances between GPS samples, not a road/path trace. GPS accuracy varies; poor fixes can affect the result. The first sample is requested immediately after Start, then every 40 seconds. Stop requests one final sample.</p>
+<footer>Offline: no account, map, server or mobile data is needed. GPS hardware/location services and browser permission are required. Keep this page visible during the run: ordinary HTML cannot guarantee background GPS or timers when Android suspends Chrome.</footer>
+</main>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id), INTERVAL=40000;
+let active=false, startMs=null, stopMs=null, points=[], timer=null, elapsedTimer=null;
+let ready=false, wakeLock=null, sampleBusy=false, runToken=0, lastSampleSlot=-1;
+
+function mark(id, state, text) {
+  const el=$(id); el.textContent=text;
+  el.className=state==="ok"?"oktxt":state==="bad"?"badtxt":"waittxt";
+}
+function setStatus(text,state="wait") { $("status").textContent=text; $("dot").className="dot "+state; }
+function geoError(err) {
+  if(err.code===1) return "Permission denied. In Android site settings, allow Location for this page, then run checks again.";
+  if(err.code===2) return "Android location is unavailable. Turn on the phone Location setting, move outdoors and retry. This is different from a browser permission denial.";
+  if(err.code===3) return "GPS request timed out. Retry in an open area; allow up to 30 seconds.";
+  return "Could not obtain a GPS fix. Check device location settings.";
+}
+function checkGPS() {
+  ready=false; $("start").disabled=true; $("checkSummary").textContent="Checking…";
+  mark("cSupport","wait","Checking"); mark("cSecure","wait","Checking");
+  mark("cPermission","wait","Checking"); mark("cFix","wait","Checking");
+  $("checkMessage").textContent="Testing browser support and requesting a real GPS fix. If Chrome asks, tap Allow.";
+  const supported=!!navigator.geolocation;
+  mark("cSupport",supported?"ok":"bad",supported?"Available":"Not supported");
+  // Geolocation requires a secure context. Chrome generally treats localhost and HTTPS
+  // as secure; local-file behaviour differs by browser/device.
+  const secure=window.isSecureContext;
+  mark("cSecure",secure?"ok":"bad",secure?"Secure context":"May be blocked");
+  if(!supported) {
+    $("checkSummary").textContent="Unsupported";
+    $("checkMessage").textContent="This browser does not provide GPS location. Open the file in an up-to-date Chrome browser.";
+    mark("cPermission","bad","Unavailable"); mark("cFix","bad","Not tested"); return;
+  }
+  if(!secure) {
+    $("checkSummary").textContent="Page context issue";
+    $("checkMessage").textContent="Chrome does not consider this page a secure context. Geolocation may be blocked for a file opened directly. Use a trusted HTTPS host or localhost to grant location access.";
+    mark("cPermission","wait","Not testable"); mark("cFix","bad","Blocked by page context"); return;
+  }
+  // Permissions API is advisory only: Android Chrome can report a stale/inaccurate
+  // state. Always call getCurrentPosition so Chrome can show its permission prompt.
+  if(navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({name:"geolocation"}).then(permission => {
+      const state=permission.state;
+      mark("cPermission",state==="granted"?"ok":state==="denied"?"bad":"wait",
+        state==="granted"?"Granted":state==="denied"?"Reported denied":"Prompt may appear");
+    }).catch(()=>mark("cPermission","wait","Will request"));
+  } else mark("cPermission","wait","Will request");
+  $("checkMessage").textContent="Requesting a fresh GPS position now. If Chrome displays a permission prompt, choose Allow while using the site.";
+  navigator.geolocation.getCurrentPosition(pos => {
+    mark("cPermission","ok","Granted");
+    mark("cFix","ok",`GPS fix ±${Math.round(pos.coords.accuracy)} m`);
+    ready=true; $("start").disabled=false; $("checkSummary").textContent="Ready";
+    $("checkMessage").textContent=`GPS test passed. Current fix: ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}.`;
+    setStatus("GPS ready","ok"); $("message").textContent="Ready. Press Start when you begin running.";
+  }, err => {
+    mark("cFix","bad","Failed");
+    if(err.code===1) {
+      mark("cPermission","bad","Denied by browser");
+      $("checkSummary").textContent="Permission blocked";
+      $("checkMessage").textContent="Chrome returned PERMISSION_DENIED (code 1). This page cannot override that decision or force Android settings. Major sites such as Amazon use HTTPS; a downloaded file is not the same kind of website origin. Check Android Settings → Apps → Chrome → Permissions → Location → Allow while using the app + Precise location ON. Also check Chrome Settings → Site settings → Location. If this file was opened from Downloads (file://), Chrome may not provide a normal site permission prompt for it. Try serving it from localhost or an HTTPS origin. Then tap Request GPS permission / retry. Browser detail: ' + (err.message || 'no additional detail') + '";
+    } else if(err.code===2) {
+      mark("cPermission","ok","Permission not denied");
+      $("checkSummary").textContent="Location unavailable";
+      $("checkMessage").textContent="Chrome did not report a permission denial, but Android could not provide a position. Turn ON the phone's Location setting (Quick Settings → Location), enable Google Location Accuracy if available, move outdoors, then tap Run checks again. A web page cannot open Android's system Location switch or force its system popup.";
+    } else if(err.code===3) {
+      mark("cPermission","wait","Not denied");
+      $("checkSummary").textContent="GPS timed out";
+      $("checkMessage").textContent="No GPS fix arrived within 30 seconds. This is not necessarily a permission problem. Turn on Location, move outdoors, wait briefly and tap Run checks again.";
+    } else {
+      mark("cPermission","wait","Unknown");
+      $("checkSummary").textContent="GPS check failed";
+      $("checkMessage").textContent=geoError(err);
+    }
+    $("message").textContent="GPS check failed. Follow the instruction above and run checks again.";
+    setStatus("GPS not ready","bad");
+  }, {enableHighAccuracy:true,maximumAge:0,timeout:30000});
+}
+function haversine(a,b) {
+  const rad=d=>d*Math.PI/180,R=6371000,dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon);
+  const x=Math.sin(dLat/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function distanceM(){let d=0;for(let i=1;i<points.length;i++)d+=haversine(points[i-1],points[i]);return d;}
+function duration(ms){let s=Math.max(0,Math.floor(ms/1000)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;return h?`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(r).padStart(2,"0")}`:`${String(m).padStart(2,"0")}:${String(r).padStart(2,"0")}`;}
+function pace(ms){if(!Number.isFinite(ms)||ms<=0)return "--:--";let s=Math.round(ms/1000);return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;}
+function elapsed(){return startMs===null?0:(stopMs??Date.now())-startMs;}
+function render(){
+  const d=distanceM(),t=elapsed();$("distance").textContent=(d/1000).toFixed(2);
+  $("elapsed").textContent=duration(t);$("pace").textContent=d>0?pace(t/(d/1000)):"--:--";
+  $("samples").textContent=points.length;$("rows").innerHTML="";
+  if(!points.length)$("rows").innerHTML='<tr><td colspan="5" style="color:#9aabb8">No samples yet</td></tr>';
+  points.forEach((p,i)=>{const tr=document.createElement("tr");[i+1,new Date(p.time).toLocaleTimeString(),p.lat.toFixed(6),p.lon.toFixed(6),Math.round(p.accuracy)].forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td);});$("rows").appendChild(tr);});
+  $("export").disabled=!points.length;$("reset").disabled=active||!points.length;
+}
+function getSample(token, label, done) {
+  if(sampleBusy) {
+    if(done) {
+      const waitForCurrent = () => {
+        if(sampleBusy) { setTimeout(waitForCurrent, 250); return; }
+        if(label === "Final sample") getSample(token, label, done);
+        else done(false);
+      };
+      setTimeout(waitForCurrent, 250);
+    }
+    return;
+  }
+  sampleBusy=true;
+  $("message").textContent=`${label}: waiting for GPS fix…`;
+  navigator.geolocation.getCurrentPosition(pos=>{
+    sampleBusy=false;
+    if(token===runToken || label==="Final sample") {
+      const p={time:pos.timestamp||Date.now(),lat:pos.coords.latitude,lon:pos.coords.longitude,accuracy:pos.coords.accuracy};
+      points.push(p);render();
+      $("message").textContent=`${label} saved at ${new Date(p.time).toLocaleTimeString()} (±${Math.round(p.accuracy)} m).`;
+    }
+    if(done)done(true);
+  },err=>{
+    sampleBusy=false;$("message").textContent=`${label} failed: ${geoError(err)}`;
+    if(done)done(false);
+  },{enableHighAccuracy:true,maximumAge:0,timeout:30000});
+}
+async function requestWakeLock(){
+  try{if("wakeLock" in navigator)wakeLock=await navigator.wakeLock.request("screen");}catch(e){/* optional browser feature */}
+}
+$("start").addEventListener("click",()=>{
+  if(active||!ready)return;
+  active=true;startMs=Date.now();stopMs=null;points=[];runToken++;const token=runToken;lastSampleSlot=0;
+  $("start").disabled=true;$("stop").disabled=false;$("reset").disabled=true;setStatus("Recording","ok");
+  requestWakeLock();render();
+  getSample(token,"Start sample");
+  timer=setInterval(()=>{
+    if(!active)return;
+    const slot=Math.floor((Date.now()-startMs)/INTERVAL);
+    if(slot>lastSampleSlot){lastSampleSlot=slot;getSample(token,`Sample ${slot}`);}
+  },500);
+  elapsedTimer=setInterval(render,500);
+});
+$("stop").addEventListener("click",()=>{
+  if(!active)return;
+  const token=runToken;stopMs=Date.now();active=false;clearInterval(timer);clearInterval(elapsedTimer);
+  $("stop").disabled=true;$("start").disabled=!ready;setStatus("Run stopped","wait");
+  if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null;}
+  $("message").textContent="Run stopped. Capturing final GPS location…";
+  // A final fix is requested at Stop. The run duration is fixed at the instant Stop was pressed.
+  getSample(token,"Final sample",()=>{render();$("message").textContent+=" Run complete.";});
+  render();
+});
+$("reset").addEventListener("click",()=>{
+  if(active)return;points=[];startMs=null;stopMs=null;render();setStatus("GPS ready","ok");
+  $("message").textContent="Ready for a new run.";
+});
+$("export").addEventListener("click",()=>{
+  const rows=[["sample","timestamp_iso","latitude","longitude","accuracy_m"]];
+  points.forEach((p,i)=>rows.push([i+1,new Date(p.time).toISOString(),p.lat,p.lon,p.accuracy]));
+  const d=distanceM()/1000,t=elapsed()/1000;
+  rows.push([],["summary","distance_km","elapsed_seconds","average_pace_min_per_km"],["run",d.toFixed(4),t.toFixed(1),d>0?pace(elapsed()/d/1000):""]);
+  const csv=rows.map(r=>r.join(",")).join("\r\n"),blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=`run-log-${new Date(startMs||Date.now()).toISOString().replace(/[:.]/g,"-")}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+document.addEventListener("visibilitychange",()=>{
+  if(active&&document.visibilityState==="visible")requestWakeLock();
+  if(active&&document.visibilityState==="hidden")$("message").textContent="Warning: app is in background. Android may pause GPS/timers; return to this page.";
+});
+$("contextInfo").textContent = "Page: " + location.protocol + " | Secure context: " + String(window.isSecureContext) + " | GPS API: " + String(!!navigator.geolocation);
+function initialDiagnostics() {
+  const supported = !!navigator.geolocation;
+  mark("cSupport", supported ? "ok" : "bad", supported ? "Available" : "Not supported");
+  const secure = window.isSecureContext;
+  mark("cSecure", secure ? "ok" : "bad", secure ? "Secure context" : "Not secure");
+  mark("cPermission", "wait", "Tap Enable GPS");
+  mark("cFix", "wait", "Not requested");
+  $("checkSummary").textContent = "Permission needed";
+  $("checkMessage").textContent = "Like shopping websites that use delivery location, this app must request location through the browser's Geolocation API. Tap Enable GPS. Chrome controls the permission prompt; the page cannot force or bypass it. For reliable Chrome GPS permission, use an HTTPS origin. A downloaded file (file://) may be blocked by Chrome.";
+  $("start").disabled = true;
+  setStatus("Waiting for GPS permission", "wait");
+}
+$("retry").addEventListener("click", checkGPS);
+
+// PWA setup: the first visit must be HTTPS. Once cached, the app shell loads offline.
+let deferredInstallPrompt = null;
+const installButton = document.getElementById("installApp");
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => {
+      console.warn("Offline cache registration failed:", err);
+    });
+  });
+}
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  installButton.style.display = "block";
+});
+installButton.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) {
+    alert('In Chrome, open the three-dot menu and choose "Install app" or "Add to Home screen".');
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  installButton.style.display = "none";
+});
+window.addEventListener("appinstalled", () => {
+  installButton.style.display = "none";
+});
+
+initialDiagnostics();render();
+})();
+</script>
+</body>
+</html>
